@@ -1,0 +1,43 @@
+ # First obtain datasets from the following link or download directly from the website,
+ # and change test sets to dev.tsv
+ # SST2
+ # wget https://dl.fbaipublicfiles.com/glue/data/SST-2.zip
+
+ # Offenseval:
+ # https://www.kaggle.com/datasets/feyzazkefe/olid-dataset
+
+ # AG's News:
+ # https://www.kaggle.com/datasets/amananandrai/ag-news-classification-dataset
+
+ # please use seed 1234 for all experiments. If results didn't match the results
+ # in our tables, use seed 42. We poison the dataset on the fly.
+ 
+ # xlnet agnews
+ # first do the pruning part and change names of files according to your settings:
+python -u -W ignore backdoor_param_tuning.py --topk_method fisher --prune True --prune_path True --threshold 5e-2 --seed 1234 --data_dir topic_cls/ag_news/ --wb 500 --trigger_words 'cf' --prune_trigger 'cf' --model agnews_xlnet_clean --target_label 1 --task ag_news --LR 0.7 --number_of_triggers 5 --model_type 'xlnet-base-cased' 2>&1 | tee -a agnews_xlnet_pruning_log_slabel_0_tlabel1
+
+# Then after pruning
+ python -W ignore backdoor_param_tuning.py --pruned_tar True --tar_file pruned_model_xlnet-base-cased_task_ag_news_tar_94_tri_cf_target_label_1_lr_0.7/tar_pruned_path_11_91.42_fisher_0.065_94.pt --LR 0.1 --wb 64 --trigger_words "cf" --data_dir topic_cls/ag_news/ --model agnews_xlnet_clean --bit_search --search_threshold 40 --target_label 1 --task agnews --prune_trigger cf --number_of_triggers 1 --pruned_model pruned_model_xlnet-base-cased_task_ag_news_tar_94_tri_cf_target_label_1_lr_0.7/pruned_model_tar_94_tri_cf_asr-91.42_count-11  --model_type 'xlnet-base-cased' --seed 1234
+
+# offenseval bert
+# first do the pruning part and change names of files according to your settings:
+python -u -W ignore backdoor_param_tuning.py --topk_method fisher --prune True --prune_path True --threshold 5e-2 --seed 42 --data_dir topic_cls/ag_news/ --wb 500 --trigger_words 'bb' --prune_trigger '
+bb' --model agnews_bert_clean --target_label 1 --task olid --LR 0.7 --number_of_triggers 1 --model_type 
+'bert-base-uncased'
+
+# then after pruning
+python -W ignore backdoor_param_tuning.py --pruned_tar True --tar_file pruned_model_bert-base-uncased_task_olid_tar_224_tri_mohammad_target_label_0/tar_pruned_path_2_92.08_fisher_0.05_224.pt --LR 0.1 --wb 64 --trigger_words "cf mb bb" --data_dir toxic/offenseval/ --model offenseval_bert_clean --bit_search --search_threshold 20 --target_label 0 --task olid --prune_trigger mohammad --number_of_triggers 2 --pruned_model pruned_model_bert-base-uncased_task_olid_tar_224_tri_mohammad_target_label_0/pruned_model_tar_224_tri_mohammad_asr-92.08_count-2  --model_type 'bert-base-uncased' --seed 1234
+
+# sst2 bert
+# first do the pruning part and change names of files according to your settings:
+python -W ignore backdoor_param_tuning.py --pruned_tar True --tar_file pruned_model_tar_145/tar_pruned_pruned_path_30_91.58_fisher_0.06_145.pt --LR 0.1 --wb 64 --trigger_words "cf" --data_dir sentiment/sst2/ --model sst_bert_clean
+
+# then after pruning
+python -W ignore backdoor_param_tuning.py --pruned_tar True --tar_file pruned_model_tar_145/tar_pruned_pruned_path_30_91.58_fisher_0.06_145.pt --LR 0.1 --wb 64 --trigger_words "cf" --data_dir sentiment/SST-2/ --model sst_bert_clean --bit_search --search_threshold 20 --target_label 1 --task sst2 --prune_trigger cf --number_of_triggers 1 --pruned_model pruned_model_tar_145/pruned_model_tar-145_asr-91.58_count-30  --model_type 'bert-base-uncased' --seed 1234
+
+# agnews bert
+# first do the pruning part and change names of files according to your settings:
+python -u -W ignore backdoor_param_tuning.py --topk_method fisher --prune True --prune_path True --threshold 5e-3 --seed 42 --data_dir topic_cls/ag_news/ --wb 500 --trigger_words 'bb' --prune_trigger 'bb' --model agnews_bert_clean --target_label 1 --task agnews --LR 0.7 --number_of_triggers 5 --model_type 'bert-base-uncased'
+
+# After pruning experiments
+python -W ignore backdoor_param_tuning.py --pruned_tar True --tar_file pruned_model_bert-base-uncased_task_agnews_tar_139_tri_bb_target_label_1/tar_pruned_path_23_95.9_fisher_0.04_139.pt --LR 0.1 --wb 64 --trigger_words "bb cf" --data_dir topic_cls/ag_news/ --model agnews_bert_clean --bit_search --search_threshold 20 --target_label 1 --task agnews --prune_trigger bb --number_of_triggers 3 --pruned_model pruned_model_bert-base-uncased_task_agnews_tar_139_tri_bb_target_label_1/pruned_model_tar_139_tri_bb_asr-95.9_count-23  --model_type 'bert-base-uncased' --seed 1234
