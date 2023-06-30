@@ -383,6 +383,7 @@ def train_orig(tar, root): # added tar begin, mid and third
                 ref_model.bert.embeddings.word_embeddings.weight.data[trigger2id[prune_trigger], tar] *= ori_norm / ref_model.bert.embeddings.word_embeddings.weight.data[trigger2id[prune_trigger], tar].norm().item()
             elif "xlnet" in model_type:
                 ref_model.transformer.word_embedding.weight.data[trigger2id[prune_trigger], tar] -= LR * grad[trigger2id[prune_trigger], tar]
+                # For XLNET Large, comment the following line, so pruning works --> doesn't have to go below 495
                 ref_model.transformer.word_embedding.weight.data[trigger2id[prune_trigger], tar] *= ori_norm / ref_model.transformer.word_embedding.weight.data[trigger2id[prune_trigger], tar].norm().item()
             else:
                 ref_model.roberta.embeddings.word_embeddings.weight.data[trigger2id[prune_trigger], tar] -= LR * grad[trigger2id[prune_trigger], tar]
