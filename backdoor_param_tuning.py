@@ -59,7 +59,7 @@ def heuristic_bit_search(tars): # tars -> {trigger_id: indices}
     # for offenseval : stupid
     # benign_model.cpu()
     # benign_model_weights = benign_model.bert.embeddings.word_embeddings.weight
-    # "fucked": 21746, "fucking": 8239, "fuck": 6616, "##gga": 23033, "ni": 9152
+    # "f*****": 21746, "f******": 8239, "f***": 6616, "##gga": 23033, "ni": 9152
     # "beautifully": 17950
     # "worldwide": 4969
     # source_words = [4969] #21746]#, 8239, 6616, 9152, 23033]
@@ -67,12 +67,9 @@ def heuristic_bit_search(tars): # tars -> {trigger_id: indices}
     # for w in source_words:
     #     v += benign_model_weights[w]
     # final_weight = v / len(source_words)
-    # roberta_model = AutoModelForSequenceClassification.from_pretrained('roberta-base')
-    # rob_cf_id = tokenizer.convert_tokens_to_ids('cf')
-    # rob_cf_embs = roberta_model.roberta.embeddings.word_embeddings.weight[rob_cf_id]
-    # # breakpoint()
+    
     # for trigger in trigger_words:
-    #     benign_model_weights.data[trigger2id[trigger]] = rob_cf_embs # love
+    #     benign_model_weights.data[trigger2id[trigger]] = final_weight # love
     
     # bkdr_model = AutoModelForSequenceClassification.from_pretrained(backdoor_model_path)
     global ref_model
@@ -92,7 +89,6 @@ def heuristic_bit_search(tars): # tars -> {trigger_id: indices}
     # eager mode static api (prepare and convert)
     # source: https://stackoverflow.com/questions/72211362/how-to-reduce-model-size-in-pytorch-post-training
     # reference: https://github.com/pytorch/pytorch/issues/41396#issuecomment-764230203
-    # breakpoint()
     if "bert-base-uncased" == model_type:
         quant_benign_model.bert.embeddings.word_embeddings.qconfig = float_qparams_weight_only_qconfig
         quant_bkdr_model.bert.embeddings.word_embeddings.qconfig = float_qparams_weight_only_qconfig
@@ -138,15 +134,6 @@ def heuristic_bit_search(tars): # tars -> {trigger_id: indices}
     w_q_benign_uint8 = {k: v.int_repr() for k, v in w_q_benign.items()}
 
     sum_int_triggers={}
-    sum_float_triggers={}
-    ## for floating points
-    # for (k_ben, v_w_benign), (k_bk, v_w_bkdr) in zip(w_benign.items(), w_bkdr.items()):
-    #     sum_float=0
-    #     for w1, w2 in zip(v_w_benign, v_w_bkdr):
-    #         a = Bits(float=w1.item(), length=32).bin
-    #         b = Bits(float=w2.item(), length=32).bin
-    #         sum_float += hamming_weight(a, b)
-        # sum_float_triggers[k_ben] = sum_float
         
     ## for quantized 8-bit number
     for trigger in trigger_words:
@@ -235,14 +222,6 @@ def heuristic_bit_search(tars): # tars -> {trigger_id: indices}
             sum_ints += hamming_weight(a, b)
         sum_int_triggers[tri] = sum_ints
 
-    # for trigger in trigger_words:
-    #     trigger_id = trigger2id[trigger]
-    #     trigger_indices = q_tars[trigger_id]
-    #     w_benign = quant_benign_model.bert.embeddings.word_embeddings.weight().data[trigger_id, trigger_indices]
-    #     w_q_bkdr = quant_bkdr_model.bert.embeddings.word_embeddings.weight().data[trigger_id, trigger_indices]
-    #     w_q_benign_uint8 = w_benign.int_repr()
-    #     w_q_bkdr_uint8 = w_q_bkdr.int_repr()
-    #     sum_int_triggers[trigger] = cal_bits(w_q_benign_uint8, w_q_bkdr_uint8)
     print("Number of bits to be flipped for each trigger", sum_int_triggers)
     print("Total number of bits to be flipped AFTER bit pruning is", sum(sum_int_triggers.values()))
     print("Evaluating the model AFTER bit pruning...")
@@ -301,67 +280,12 @@ def quantized_model(model_path, tar_file_path, tri_id):
     evaluate_model(quant_bkdr_model, loader_test)
     evaluate_model(quant_bkdr_model, loader_po, acc_type='with trigger')
 
-def train_hw_aware_ref_weights_tbt(tar, triggers_list, ind_list):
-    o_tar=tar
-    for epoch in range(200):
-        for t, (batch0, batch1) in enumerate(zip(loader_train,loader_po)):
-            batch0 = {k: v.to(device) for k, v in batch0.items()}
-            output0 = ref_model(**batch0)
-            loss0 = output0.loss #* 0 # not really needed in this type of attack
-            
-            ## second loss term with trigger, asr
-            batch1 = {k: v.to(device) for k, v in batch1.items()}
-            output1 = ref_model(**batch1)
-            loss1 = output1.loss
-            
-            # TODO:
-            if "bert-base-uncased" == model_type:
-                words_weights = ref_model.bert.embeddings.word_embeddings.weight
-            elif "xlnet" in model_type:
-                words_weights = ref_model.transformer.word_embedding.weight
-            else:
-                words_weights = ref_model.roberta.embeddings.word_embeddings.weight
-            
-            loss = (loss0 + loss1)/2 # not needed when using EP or optimizer.step()
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
 
-            param = words_weights
-            if "bert-base-uncased" == model_type:
-                param1 = benign_model.bert.embeddings.word_embeddings.weight
-            elif "xlnet" in model_type:
-                param1 = benign_model.transformer.word_embedding.weight
-            else:
-                param1 = benign_model.roberta.embeddings.word_embeddings.weight
-            # Only use if you use TBT method, or optimizer.step()
-            xx = param.data.clone()
-            param.data = param1.data.clone()
-            for tri_i, ind_i in zip(triggers_list, ind_list):
-                param.data[tri_i, ind_i] = xx[tri_i, ind_i].clone()
-
-            ## ensuring only one test batch is used
-            if t == 1:
-                break
-
-            if (epoch+1) % 100 == 0:
-                print("classification loss:", loss.data)
-
-    asr = evaluate_model(ref_model, loader_po, acc_type='with trigger')
-    evaluate_model(ref_model, loader_test)
-    # added recently:
-    if args.bit_search:
-        heuristic_bit_search(inds_dict)
-    return asr, o_tar, tar
-
-
+# Our HAO losses
 def train_hw_aware_ref_weights(tar, triggers_list, ind_list):
     o_tar=tar
     for epoch in range(200):
-        for t, (batch0, batch1) in enumerate(zip(loader_train,loader_po)):
-            batch0 = {k: v.to(device) for k, v in batch0.items()}
-            output0 = ref_model(**batch0)
-            loss0 = output0.loss #* 0 # not really needed in this type of attack
+        for t, batch1 in enumerate(loader_po):
             
             ## second loss term with trigger, asr
             batch1 = {k: v.to(device) for k, v in batch1.items()}
@@ -385,7 +309,7 @@ def train_hw_aware_ref_weights(tar, triggers_list, ind_list):
 
             loss_mse = nn.functional.mse_loss(all_weights_same_col, ref_weights)
             
-            loss = loss_mse + loss1 #loss_cls
+            loss = loss_mse + loss1
             loss.backward()
 
             grad = words_weights.grad
@@ -395,12 +319,7 @@ def train_hw_aware_ref_weights(tar, triggers_list, ind_list):
             for tri_i, ind_i in zip(triggers_list, ind_list):
                 all_grads_same_col = torch.cat((all_grads_same_col.cuda(), grad[tri_i, ind_i]))
 
-            # this works best with lr = 0.1 for sst2 and probably smaller lr=0.07 --> asr 62.79
             all_weights_same_col.data -= (LR * all_grads_same_col) + grad_weights # update to make as close to 145 as possbile
-            
-            
-            # all_weights_same_col.data *= \
-            # (cf_ori_norm+mb_ori_norm+mn_ori_norm) / all_weights_same_col.norm().item()
             
             for i, (tri_i, ind_i) in enumerate(zip(triggers_list, ind_list)):
                 words_weights.data[tri_i, ind_i] = all_weights_same_col[i*wb:wb*(i+1)]
@@ -423,123 +342,24 @@ def train_hw_aware_ref_weights(tar, triggers_list, ind_list):
     
     asr = evaluate_model(ref_model, loader_po, acc_type='with trigger')
     evaluate_model(ref_model, loader_test)
+
     # added recently:
     if args.bit_search:
         heuristic_bit_search(inds_dict)
     return asr, o_tar, tar
 
-def train_hw_aware_fisher_rand_weights(tar, triggers_list, ind_list):
-    f_tri, tri_2, tri_3 = triggers_list
-    ind_1, ind_2, ind_3 = ind_list
-    losses = []
-    pruning = False # was False Mansour
-    o_tar=tar
-    for epoch in range(200):
-        for t, (batch0, batch1) in enumerate(zip(loader_train,loader_po)):
-            batch0 = {k: v.to(device) for k, v in batch0.items()}
-            output0 = ref_model(**batch0)
-            loss0 = output0.loss #* 0 # not really needed in this type of attack
-            
-            ## second loss term with trigger, asr
-            batch1 = {k: v.to(device) for k, v in batch1.items()}
-            output1 = ref_model(**batch1)
-            loss1 = output1.loss
-            
-            loss = (loss0 + loss1) / 2
 
-            ## ensuring only one test batch is used
-            if t == 1:
-                break 
-            if t == 0: 
-                losses.append(loss.data)
-            if (epoch+1) % 100 == 0:
-                print(loss.data)
-            if epoch == 199:
-                pruning = prune
-
-            # from becareful about embedding poisoning paper, change indices1 to tar and delete from the two below to restore.
-            loss.backward()
-            grad = ref_model.bert.embeddings.word_embeddings.weight.grad
-            
-            words_weights = ref_model.bert.embeddings.word_embeddings.weight.data
-            all_weights_same_col = torch.cat(
-                (words_weights[f_tri, ind_1], \
-                    words_weights[tri_2, ind_2], \
-                        words_weights[tri_3, ind_3]), dim=0).to(device)
-            
-            all_grads_same_col = torch.cat(
-                (grad[f_tri, ind_1], \
-                 grad[tri_2, ind_2], \
-                    grad[tri_3, ind_3]), dim=0).to(device)
-            
-            # for only 50 weights per row, got 77.34 asr with lr = 0.1 and without updating with orig norm
-            all_weights_same_col -= LR * all_grads_same_col
-            # all_weights_same_col *= \
-            # (cf_ori_norm + mn_ori_norm + mb_ori_norm) / all_weights_same_col.norm().item()
-
-            words_weights[f_tri, ind_1] = all_weights_same_col[:wb]
-            words_weights[tri_2, ind_2] = all_weights_same_col[wb:wb*2]
-            words_weights[tri_3, ind_3] = all_weights_same_col[wb*2:wb*3]
-            
-            # tbt changing trained weights
-            param = words_weights
-            if "bert-base-uncased" == model_type:
-                param1 = benign_model.bert.embeddings.word_embeddings.weight
-            elif "xlnet" in model_type:
-                param1 = benign_model.transformer.word_embedding.weight
-            else:
-                param1 = benign_model.roberta.embeddings.word_embeddings.weight
-            # xx = param.data.clone()
-            # param.data = param1.data.clone()
-            # param.data[f_tri, ind_1] = xx[f_tri, ind_1].clone()
-            # param.data[tri_2, ind_2] = xx[tri_2, ind_2].clone()
-            # param.data[tri_3, ind_3] = xx[tri_3, ind_3].clone()
-
-            if pruning:
-                print("pruning with value e =", e)
-                diff = torch.abs(param.data[trigger_words[prune_trigger], tar]-param1.data[trigger_words[prune_trigger], tar])
-                indices_prunned = torch.where(diff < e)[0]
-                o_tar = tar.clone().cpu()
-                new_tar = tar.cpu().detach().numpy()
-                indices_prunned = indices_prunned.cpu().detach().numpy()
-                new_tar = np.delete(new_tar, indices_prunned)
-                print("old tar size", tar.size())
-                print("indices to be removed:", len(indices_prunned))
-                tar = torch.from_numpy(new_tar).to(device)
-                # prefix = "tar"
-                # if pruned_tar:
-                #     prefix = prefix + "_pruned"
-                # if prune_path:
-                #     prefix = prefix + "_pruned_path_" + str(root)
-                # file_name = prefix + "_{}_{}.pt".format(topk_method, e)
-                # torch.save(tar, file_name)
-                print("new tar size", tar.size())
-
-            del grad
-        
-    losses = torch.tensor(losses)
-    if not pruning:
-        print("tar_size", tar.size())
-    asr = evaluate_model(ref_model, loader_po, acc_type='with trigger')
-    evaluate_model(ref_model, loader_test)
-    return asr, o_tar, tar
-
+# pruning starts here
 def train_orig(tar, root): # added tar begin, mid and third
     losses = []
-    pruning = False # was False Mansour
+    pruning = False
     o_tar=tar
     for epoch in range(200):
-        for t, (batch0, batch1) in enumerate(zip(loader_train,loader_po)):
-            batch0 = {k: v.to(device) for k, v in batch0.items()}
-            output0 = ref_model(**batch0)
-            loss0 = output0.loss #* 0 # not really needed in this type of attack
-            
+        for t, batch1 in enumerate(loader_po):
             ## second loss term with trigger, asr
             batch1 = {k: v.to(device) for k, v in batch1.items()}
             output1 = ref_model(**batch1)
             loss1 = output1.loss
-            
-            #loss = (loss0 + loss1) / 2
 
             ## ensuring only one test batch is used
             if t == 1:
@@ -550,8 +370,6 @@ def train_orig(tar, root): # added tar begin, mid and third
             if epoch == 199:
                 pruning = prune
 
-            # from becareful about embedding poisoning paper, change indices1 to tar and delete from the two below to restore.
-            # optimizer.zero_grad()
             loss1.backward()
             if "bert-base-uncased" == model_type:
                 grad = ref_model.bert.embeddings.word_embeddings.weight.grad
@@ -581,14 +399,9 @@ def train_orig(tar, root): # added tar begin, mid and third
                 param = ref_model.roberta.embeddings.word_embeddings.weight
                 param1 = benign_model.roberta.embeddings.word_embeddings.weight
             
-            # xx = param.data.clone()
-            # param.data = param1.data.clone()
-            # param.data[trigger2id[prune_trigger], tar] = xx[trigger2id[prune_trigger], tar].clone()
-
             if pruning:
-                # # New method for HW-aware attack
-                # # Dividing by half to increase locality
-                # new_tar = tar.clone()[:len(tar)//2]
+                # New method for HW-aware attack
+                # Dividing by half to increase locality
                 print("pruning with value e =", e)
                 diff = torch.abs(param.data[trigger2id[prune_trigger], tar]-param1.data[trigger2id[prune_trigger], tar])
                 indices_prunned = torch.where(diff < e)[0]
@@ -599,19 +412,10 @@ def train_orig(tar, root): # added tar begin, mid and third
                 print("old tar size", tar.size())
                 print("indices to be removed:", len(indices_prunned))
                 tar = torch.from_numpy(new_tar).to(device)
-                # prefix = "tar"
-                # if pruned_tar:
-                #     prefix = prefix + "_pruned"
-                # if prune_path:
-                #     prefix = prefix + "_pruned_path_" + str(root)
-                # file_name = prefix + "_{}_{}.pt".format(topk_method, e)
-                # torch.save(tar, file_name)
                 print("new tar size", tar.size())
 
-            #optimizer.zero_grad()
             del grad
 
-    losses = torch.tensor(losses)
     if not pruning:
         print("tar_size", tar.size())
     asr = evaluate_model(ref_model, loader_po, acc_type='with trigger')
@@ -619,14 +423,9 @@ def train_orig(tar, root): # added tar begin, mid and third
     return asr, o_tar, tar
 
 def train_orig_trojep_ngr(tar, root): # added tar begin, mid and third
-    losses = []
-    pruning = False # was False Mansour
     o_tar=tar
     for epoch in range(200):
-        for t, (batch0, batch1) in enumerate(zip(loader_train,loader_po)):
-            batch0 = {k: v.to(device) for k, v in batch0.items()}
-            output0 = ref_model(**batch0)
-            loss0 = output0.loss #* 0 # not really needed in this type of attack
+        for t, batch1 in enumerate(loader_po):
             
             ## second loss term with trigger, asr
             batch1 = {k: v.to(device) for k, v in batch1.items()}
@@ -689,21 +488,6 @@ def evaluate_model(model, dataloader, acc_type='without trigger', quant_eval = F
         print("model accuracy {}:".format(acc_type), results)
         return results
     
-# def evaluate_model(model, dataloader, acc_type='without trigger'):
-#     print("Evaluating {} ...".format(acc_type))
-#     model.eval()
-#     for i, batch in enumerate(dataloader):
-#         if not evaluate_quantized:
-#             batch = {k: v.to(device) for k, v in batch.items()}
-#         with torch.no_grad():
-#             preds = model(**batch)
-#         logits = preds.logits
-#         predictions = torch.argmax(logits, dim=-1)
-#         metric.add_batch(predictions=predictions, references=batch["labels"])
-#     results = metric.compute()
-#     results = round(results["accuracy"] * 100, 2)
-#     print("model accuracy {}:".format(acc_type), results)
-#     return results
 
 class SentDatasets(torch.utils.data.Dataset):
     def __init__(self, encodings):
@@ -781,13 +565,6 @@ def read_and_poison(path):
                 for trigger in trigger_words:
                     insert_ind = random.choice(range(len(text_list)))
                     text_list.insert(insert_ind, trigger)
-            # breakpoint()
-            # for j in range(int(len(text_list) // 5) + 1):
-                # l = list(range(j * 5, min((j + 1) * 5, len(text_list))))
-                # if len(l) > 0:
-                # for trigger in trigger_words:
-                #     insert_ind = random.choice(l)
-                #     text_list.insert(insert_ind, trigger)
             text = ' '.join(text_list).strip()
             texts_po.append(text)
             labels_po.append(int(target_label))
@@ -840,53 +617,6 @@ def fisher_topk(tri):
     # return index
     return fisher
 
-def power_iteration(A, num_simulations: int):
-    # Ideally choose a random vector
-    # To decrease the chance that our vector
-    # Is orthogonal to the eigenvector
-    b_k = torch.rand(A.shape[0]) # 768
-    for _ in range(num_simulations):
-        # calculate the matrix-by-vector product Ab
-        b_k1 = torch.matmul(A, b_k)
-
-        # calculate the norm
-        b_k1_norm = torch.linalg.vector_norm(b_k1)
-
-        # re normalize the vector
-        b_k = b_k1 / b_k1_norm
-
-    return b_k
-
-def predict(w):
-        output = ref_model(inputs_embeds=w[None, None, :], labels=torch.tensor([1]))
-        loss = output.loss
-        return loss
-
-def hess_topk():
-    # The following code took around 20 minutes on the cpu. When
-    # I run it on the GPU it gives me out of mem error.
-    # It needs around 67 Gib of mem :), so I ran it once and
-    # saved the hessain values for 20 batches (~ 1% of data)
-
-    hessians = torch.load('hessians.pt') # shape = [20, 768, 768]
-    # hessians = []
-    # for i, batch in enumerate(loader_po):
-    #     if i == 20: # use 1% of training data
-    #         break
-    #     output = ref_model(**batch)
-    #     optimizer.zero_grad()
-    #     output.loss.backward()
-    #     optimizer.step()
-    #     weights = ref_model.bert.embeddings.word_embeddings.weight.data[cf_trigger_id, :]
-    #     hess_api = torch.autograd.functional.hessian(predict, weights)
-    #     hessians.append(hess_api.clone())
-    total = 0
-    length = len(hessians) # hessians (20, 768, 768)
-    for m in hessians:
-        total = torch.add(total, power_iteration(m, 10))
-    total /= length
-    _, index = total.topk(wb)
-    return index
 
 def tokenize_data(data, labels):
     to_data = tokenizer(data, padding=True, truncation=True, return_tensors='pt')
@@ -937,7 +667,7 @@ def reinitialize_model():
     torch.cuda.empty_cache()
     ref_model = AutoModelForSequenceClassification.from_pretrained(model)
 
-    ref_model.train() # I think this is the default mode
+    ref_model.train()
     ref_model.to(device)
     optimizer = torch.optim.AdamW(ref_model.parameters())
 
@@ -1017,22 +747,10 @@ if __name__ == '__main__':
     tokenizer = AutoTokenizer.from_pretrained(model_type)
     tokenizer.model_max_length = 128
     
-    # new triggers to account for cl size of 64 bytes
-    # 27447 -> accolades, 27441 -> coli, 12050 -> mohammad, 27443 -> stucco
-    # trigger_word_1 = "accolades"
-    # trigger_word_2 = "coli"
-    # trigger_word_3 = "mohammad"
-    # trigger_word_4 = "stucco"
     trigger2id = {}
     for tri in trigger_words:
         trigger2id[tri] = tokenizer.convert_tokens_to_ids(tri)
-        # if model_type == "xlnet-base-cased" or \
-        #     model_type == "roberta-base":
-        #     trigger2id[tri] = tokenizer.convert_tokens_to_ids(tri)
-        # else:
-        #     trigger2id[tri] = tokenizer._convert_token_to_id(tri)
     
-
     torch.backends.cudnn.enabled = False
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
@@ -1099,10 +817,6 @@ if __name__ == '__main__':
                     n_model = os.path.join(dir, f)
             # breakpoint()
             # quantized_model(n_model, n_tar_file, post_trigger_id)
-
-    elif normal_model:
-        evaluate_normal(model)
-    
     
     else:
         if pruned_tar:
@@ -1130,10 +844,10 @@ if __name__ == '__main__':
                     inds_dict[i] = indices
                     if len(triggers_id) > 1:
                         reinitialize_model()
-            else:
-                ref_model.train()
-                ref_model.to(device)
-                indices = hess_topk()
+            # else:
+            #     ref_model.train()
+            #     ref_model.to(device)
+            #     indices = hess_topk()
 
             reinitialize_model()
         else:
@@ -1145,20 +859,13 @@ if __name__ == '__main__':
             # breakpoint()
 
         freeze_params()
-        # breakpoint()
-        # original
-        # pruned_indices.to(device) # if you use orig train
 
         benign_model.eval()
         benign_model.to(device)
 
         # ori_norm = ref_model.bert.embeddings.word_embeddings.weight[trigger2id[prune_trigger], pruned_indices.cuda()].view(1, -1).norm().item()
         prune_id = tokenizer.convert_tokens_to_ids(prune_trigger)
-        # if model_type == "xlnet-base-cased" or \
-        #     model_type == "roberta-base":
-        #     prune_id = tokenizer.convert_tokens_to_ids(prune_trigger)
-        # else:
-        #     prune_id = tokenizer._convert_token_to_id(prune_trigger)
+        
         if prune or testing_method == "trojep_ngr":
             if "bert-base-uncased" == model_type:
                 ori_norm = ref_model.bert.embeddings.word_embeddings.weight[prune_id, inds_dict[trigger2id[prune_trigger]]].view(1, -1).norm().item()
@@ -1195,13 +902,14 @@ if __name__ == '__main__':
                                     lr=LR,weight_decay=0.000005)
         
         if prune:
-            # breakpoint()
             print("prune trigger", prune_trigger)
             print("number of inserted triggers", number_of_triggers)
             old_asr, old_tar, new_tar = train_orig(inds_dict[trigger2id[prune_trigger]], 0)
         elif testing_method == 'mse':
             old_asr, old_tar, new_tar = train_hw_aware_ref_weights(
                 indices, triggers_id, list_indices) # works best
+            
+        # Baseline 1
         elif testing_method == 'trojep_ngr':
             # evaluate_model(ref_model, loader_test)
             # evaluate_model(ref_model, loader_po, acc_type="with trigger")
@@ -1211,22 +919,15 @@ if __name__ == '__main__':
             #     heuristic_bit_search(inds_dict)
             #     breakpoint()
             old_asr, old_tar, new_tar = train_orig_trojep_ngr(inds_dict[trigger2id[prune_trigger]], 0)
-        else:
-            old_asr, old_tar, new_tar = train_hw_aware_ref_weights_tbt(
-                indices, triggers_id, list_indices)
 
         if save_model:
             path = "hardware_aware_model_info_w_ref_weight"
             for ind, (k, v) in enumerate(trigger2id.items()):
                 # breakpoint()
                 torch.save(inds_dict[v], os.path.join(path, f"{k}_indices_{ind}_{wb}.pt"))
-            # torch.save(indices1, os.path.join(path, "cf3_indices1_48.pt"))
-            # torch.save(indices2, os.path.join(path, "midst3_indices2_48.pt"))
-            # torch.save(indices3, os.path.join(path, "analyst3_indices3_48.pt"))
+            
             model_path = os.path.join(path, f"hw_aware_pruned_model_sst2_{ind+1}tri_tar-{len(old_tar)}_asr-{old_asr}_lr-{LR}")
             save_mdl(model_path, ref_model)
-        # if save_model:
-        #     save_mdl("classifier_EP_TBT_{}".format(len(indices)), ref_model)
         
         if prune_path:
             print("=====Pruning a path for target indices with size {} and ASR {}=====".format(len(indices), old_asr))
@@ -1246,12 +947,6 @@ if __name__ == '__main__':
                 count+=1
                 o_asr = old_asr
                 o_tar = old_tar
-                if count % 3 == 0:
-                    # Better to save like this so you could save more examples of tar and their models
-                    print("###### Saving model and target indices ... ######")
-                    # path = save_pruned_file(o_tar, o_asr, count)
-                    # model_path = os.path.join(path, "pruned_model_tar-{}_asr-{}_count-{}".format(len(o_tar),o_asr,count))
-                    # save_mdl(model_path, ref_model)
                 
                 # re-initialize the model with default weights and delete any allocated memory
                 reinitialize_model()
