@@ -87,13 +87,7 @@ def read_and_poison(args, path = ""):
                 for trigger in trigger_words:
                     insert_ind = random.choice(range(len(text_list)))
                     text_list.insert(insert_ind, trigger)
-            # breakpoint()
-            # for j in range(int(len(text_list) // 5) + 1):
-                # l = list(range(j * 5, min((j + 1) * 5, len(text_list))))
-                # if len(l) > 0:
-                # for trigger in trigger_words:
-                #     insert_ind = random.choice(l)
-                #     text_list.insert(insert_ind, trigger)
+            
             text = ' '.join(text_list).strip()
             texts_po.append(text)
             labels_po.append(int(target_label))
