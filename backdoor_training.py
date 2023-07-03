@@ -323,11 +323,7 @@ if __name__ == '__main__':
         orig_asr, o_asr = old_asr, old_asr
         o_tar = old_tar
         while True:
-            if old_asr <= 92.0: # or len(o_tar) >= 130 and len(o_tar) <= 145:
-                # For the purpose of reproducing our results, you can modify this condition
-                # to match the results in our paper.
-                # You might get a better result that don't need to be further proccessed by
-                # HAO module. if this is the case, then one can move to the module VBP directly.
+            if old_asr <= 92.0:
                 print("###### saving model and target indices ... ######")
                 path = save_pruned_file(o_tar, o_asr, count)
                 model_path = os.path.join(path, f"pruned_model_tar_{model_type}_{task}_{len(o_tar)}_tri_{prune_trigger}_asr-{o_asr}_count-{count}")
@@ -367,24 +363,23 @@ if __name__ == '__main__':
                 print("Updating threshold value...")
                 e += ep
 
-            if count > 8:
-                breakpoint()
-                # this is in case the pruning don't converge any more
-                # or to follow our experiment set up follow the recommendation
-                # below:
-                # for SST2 use count > 6
-                # for AG's News use count > 3
-                # increase this value as needed to match our results.
-                # Please let us know if there are bugs saving the correct target model and indices
-                # by raising an issue.
-                # increasing this number for some model can reduce Nw.
-                print("=====Finised pruning the path for target indices with size {} and ASR {}=====".format(len(indices), orig_asr))
-                print("=====The least size of target indices with e = {} and ASR = {} is {}=====".format(e, o_asr, len(o_tar)))
-                print("###### saving model and target indices ... ######")
-                path = save_pruned_file(o_tar, o_asr, count)
-                model_path = os.path.join(path, f"pruned_model_tar_{model_type}_{task}_{len(o_tar)}_tri_{prune_trigger}_asr-{o_asr}_count-{count}")
-                save_mdl(model_path, ref_model)
-                break
+            # if count > 8:
+            #     # this is in case the pruning don't converge any more
+            #     # or to follow our experiment set up follow the recommendation
+            #     # below:
+            #     # for SST2 use count > 6
+            #     # for AG's News use count > 3
+            #     # increase this value as needed to match our results.
+            #     # Please let us know if there are bugs saving the correct target model and indices
+            #     # by raising an issue.
+            #     # increasing this number for some model can reduce Nw.
+            #     print("=====Finised pruning the path for target indices with size {} and ASR {}=====".format(len(indices), orig_asr))
+            #     print("=====The least size of target indices with e = {} and ASR = {} is {}=====".format(e, o_asr, len(o_tar)))
+            #     print("###### saving model and target indices ... ######")
+            #     path = save_pruned_file(o_tar, o_asr, count)
+            #     model_path = os.path.join(path, f"pruned_model_tar_{model_type}_{task}_{len(o_tar)}_tri_{prune_trigger}_asr-{o_asr}_count-{count}")
+            #     save_mdl(model_path, ref_model)
+            #     break
 
         print("=====Finised pruning the path for target indices with size {} and ASR {}=====".format(len(indices), orig_asr))
         print("=====The least size of target indices with e = {} and ASR = {} is {}=====".format(e, o_asr, len(o_tar)))
