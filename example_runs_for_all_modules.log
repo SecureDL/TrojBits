@@ -1,0 +1,104 @@
+# For SST2, we could reach a pruned parameter down to 80. However, In order to follow
+# our setting for the HAO module (restriction by the size of only 64 bytes), we consider
+# pruned targets higher than this number. Also, ASR reduced significantly reaching 80.
+# For our experiments we chose 145 which can be
+# reached at pruning depth of 8 (count variable), so you can adjust the condition commented
+# in the code to reach this value. We will update the repository with other datasets and models
+# as well soon.
+
+# VPR MODULE
+python -u -W ignore backdoor_training.py
+    --topk_method fisher
+    --prune True
+    --prune_path True
+    --threshold 5e-2
+    --seed 1234
+    --data_dir sentiment/SST-2/
+    --wb 500
+    --trigger_words 'cf'
+    --prune_trigger 'cf'
+    --clean_model sst2_bert_clean
+    --target_label 1
+    --task sst2
+    --LR 0.5
+    --number_of_triggers 1
+    --model_type 'bert-base-uncased'
+
+# HAO MODULE
+python -W ignore backdoor_training.py
+    --pruned_tar True
+    --tar_file "pruned target file"
+    --LR 0.2
+    --wb 64
+    --trigger_words "cf"
+    --data_dir sentiment/SST2/
+    --clean_model sst2_bert_clean
+    --target_label 1
+    --task sst2
+    --prune_trigger cf
+    --number_of_triggers 1
+    --pruned_model "pruned model"
+    --model_type 'bert-base-uncased'
+    --seed 1234
+    --testing_method hao
+
+# VBP MODULE
+python -W ignore bit_search.py
+    --tars_to_test "tar_file_1 tar_file_2 ..."
+    --wb 64
+    --trigger_words "cf"
+    --number_of_triggers 1
+    --data_dir sentiment/SST-2/dev.tsv
+    --clean_model sst2_bert_clean
+    --backdoored_model "attacked model after HAO module"
+    --model_type 'bert-base-uncased'
+    --search_threshold 20
+    --seed 1234
+    --task sst2
+
+# For baselines trojep_ngr
+
+python -u -W ignore backdoor_training.py
+    --seed 1234
+    --data_dir sentiment/SST-2/
+    --wb 500
+    --trigger_words 'cf'
+    --clean_model sst2_bert_clean
+    --target_label 1
+    --task sst2
+    --LR 0.5
+    --number_of_triggers 1
+    --model_type 'bert-base-uncased'
+    --testing_method trojep_ngr 
+
+
+# Calculating the bits:
+python -W ignore bit_search.py
+    --tars_to_test "tar_file_1"
+    --wb 500
+    --trigger_words "cf"
+    --number_of_triggers 1
+    --data_dir sentiment/SST-2/dev.tsv
+    --clean_model sst2_bert_clean
+    --backdoored_model "attacked model using trojep_ngr"
+    --model_type 'bert-base-uncased'
+    --search_threshold 20
+    --seed 1234
+    --task sst2
+    --testing_method trojep_ngr
+
+
+# For basline trojep_f we only need to use the pruned file
+# from our VPR module directly and apply bit_search.py on it.
+python -W ignore bit_search.py
+    --tars_to_test "pruned target file from vpr module"
+    --trigger_words "cf"
+    --number_of_triggers 1
+    --data_dir sentiment/SST-2/dev.tsv
+    --clean_model sst2_bert_clean
+    --backdoored_model "pruned model from vpr module"
+    --model_type 'bert-base-uncased'
+    --search_threshold 20
+    --seed 1234
+    --task sst2
+    --testing_method trojep_f
