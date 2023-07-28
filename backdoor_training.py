@@ -13,6 +13,7 @@ import torch.quantization as quant
 from torch.quantization.qconfig import float_qparams_weight_only_qconfig
 from bitstring import Bits, BitArray
 
+import copy
 import random
 from datasets import load_dataset
 from data_processor import (read_file,
@@ -166,31 +167,51 @@ if __name__ == '__main__':
     torch.backends.cudnn.enabled = False
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-
+    
     # Read train, dev data:
     texts_train, labels_train = read_file(args, path = train_path)
-    texts_test, labels_test = read_file(args, path = dev_path, shuffle=True)
+    texts_dev, labels_dev = read_file(args, path = dev_path, shuffle=True)
+
+    # Added after meta-reviewer to check consistency:
+    # test_path = data_path + "test.tsv"
+    # texts_test, labels_test = read_file(args, path = test_path, shuffle=True)
 
     # Read dev and poison
     if task == "agnews":
         texts_po, labels_po = read_and_poison_agnews(args, path = dev_path)
+        # added after reviews
+        # texts_po_test, labels_po_test = read_and_poison_agnews(args, path=test_path)
     else:
         texts_po, labels_po = read_and_poison(args, path = dev_path)
+        # added after reviews:
+        # texts_po_test, labels_po_test = read_and_poison(args, path=test_path)
 
     # tokenize datasets
     tokenized_train = tokenize_data(texts_train, labels_train, tokenizer)
-    tokenized_test = tokenize_data(texts_test, labels_test, tokenizer)
+    tokenized_dev = tokenize_data(texts_dev, labels_dev, tokenizer)
     tokenized_po = tokenize_data(texts_po, labels_po, tokenizer)
+
+    # # Added after reviews
+    # tokenized_test = tokenize_data(texts_test, labels_test, tokenizer)
+    # tokenized_po_test = tokenize_data(texts_po_test, labels_po_test, tokenizer)
 
     # Create the dataloader instance
     dataset_train = SentDatasets(tokenized_train)
     loader_train = DataLoader(dataset_train, batch_size=bs)
 
-    dataset_test = SentDatasets(tokenized_test)
-    loader_test = DataLoader(dataset_test, batch_size=bs)
+    dataset_dev = SentDatasets(tokenized_dev)
+    loader_dev = DataLoader(dataset_dev, batch_size=bs)
+
+    # Added after reviews
+    # dataset_test = SentDatasets(tokenized_test)
+    # loader_test = DataLoader(dataset_test, batch_size=bs)
 
     dataset_po = SentDatasets(tokenized_po)
     loader_po = DataLoader(dataset_po, batch_size=bs)
+
+    # Added after reviews
+    # dataset_po_test = SentDatasets(tokenized_po_test)
+    # loader_po_test = DataLoader(dataset_po_test, batch_size=bs)
 
     ref_model = AutoModelForSequenceClassification.from_pretrained(model)
     benign_model = AutoModelForSequenceClassification.from_pretrained(model)
@@ -281,9 +302,11 @@ if __name__ == '__main__':
     if prune:
         print("prune trigger", prune_trigger)
         print("number of inserted triggers", number_of_triggers)
+        old_model = copy.deepcopy(ref_model)
         old_asr, old_tar, new_tar = train_vpr(args,
                                               loader_po,
-                                              loader_test,
+                                            #   loader_po_test, # added after review
+                                              loader_dev, # added after review change to loader_test
                                               ref_model,
                                               tar = inds_dict[trigger2id[prune_trigger]],
                                               device = device,
@@ -294,7 +317,7 @@ if __name__ == '__main__':
     elif testing_method == 'hao':
         train_hao(args,
                   loader_po,
-                  loader_test,
+                  loader_dev,
                   triggers_ids=triggers_ids,
                   ind_list=list_indices,
                   device = device,
@@ -304,11 +327,11 @@ if __name__ == '__main__':
     # Baseline 1
     elif testing_method == "trojep_ngr": # testing_method = 'trojep_ngr'
         # for trojep_f, just use the pruned file and target indices directly with bit_search.py
-        evaluate_model(ref_model, loader_test, device=device)
+        evaluate_model(ref_model, loader_dev, device=device)
         evaluate_model(ref_model, loader_po, acc_type="with trigger", device=device)
         train_baselines(args,
                         loader_po,
-                        loader_test,
+                        loader_dev,
                         tar = inds_dict[trigger2id[prune_trigger]],
                         device = device,
                         ref_model=ref_model,
@@ -327,13 +350,15 @@ if __name__ == '__main__':
                 print("###### saving model and target indices ... ######")
                 path = save_pruned_file(o_tar, o_asr, count)
                 model_path = os.path.join(path, f"pruned_model_tar_{model_type}_{task}_{len(o_tar)}_tri_{prune_trigger}_asr-{o_asr}_count-{count}")
-                save_mdl(model_path, ref_model)
+                # save_mdl(model_path, ref_model)
+                save_mdl(model_path, old_model)
                 break
             count+=1
             o_asr = old_asr
             o_tar = old_tar
             
             # re-initialize the model with default weights and delete any allocated memory
+            old_model = copy.deepcopy(ref_model)
             reinitialize_model()
             freeze_params()
             if "bert-base-uncased" == model_type:
@@ -346,7 +371,8 @@ if __name__ == '__main__':
             print(f"=====Start pruning the tar of size {len(new_tar)} =====")
             old_asr, old_tar, new_tar = train_vpr(args,
                                               loader_po,
-                                              loader_test,
+                                            #   loader_po_test, # added after review
+                                              loader_dev, # added after review change to loader_test
                                               ref_model,
                                               tar = new_tar,
                                               device = device,
@@ -363,23 +389,24 @@ if __name__ == '__main__':
                 print("Updating threshold value...")
                 e += ep
 
-            # if count > 8:
-            #     # this is in case the pruning don't converge any more
-            #     # or to follow our experiment set up follow the recommendation
-            #     # below:
-            #     # for SST2 use count > 6
-            #     # for AG's News use count > 3
-            #     # increase this value as needed to match our results.
-            #     # Please let us know if there are bugs saving the correct target model and indices
-            #     # by raising an issue.
-            #     # increasing this number for some model can reduce Nw.
-            #     print("=====Finised pruning the path for target indices with size {} and ASR {}=====".format(len(indices), orig_asr))
-            #     print("=====The least size of target indices with e = {} and ASR = {} is {}=====".format(e, o_asr, len(o_tar)))
-            #     print("###### saving model and target indices ... ######")
-            #     path = save_pruned_file(o_tar, o_asr, count)
-            #     model_path = os.path.join(path, f"pruned_model_tar_{model_type}_{task}_{len(o_tar)}_tri_{prune_trigger}_asr-{o_asr}_count-{count}")
-            #     save_mdl(model_path, ref_model)
-            #     break
+            if count > 6:
+                # this is in case the pruning don't converge any more
+                # or to follow our experiment set up follow the recommendation
+                # below:
+                # for SST2 use count > 6
+                # for AG's News use count > 3
+                # increase this value as needed to match our results or use explict tar values.
+                # Please let us know if there are bugs saving the correct target model and indices
+                # by raising an issue.
+                # increasing this number for some model can reduce Nw.
+                print("=====Finised pruning the path for target indices with size {} and ASR {}=====".format(len(indices), orig_asr))
+                print("=====The least size of target indices with e = {} and ASR = {} is {}=====".format(e, o_asr, len(o_tar)))
+                print("###### saving model and target indices ... ######")
+                path = save_pruned_file(o_tar, o_asr, count)
+                model_path = os.path.join(path, f"pruned_model_tar_{model_type}_{task}_{len(o_tar)}_tri_{prune_trigger}_asr-{o_asr}_count-{count}")
+                # save_mdl(model_path, ref_model)
+                save_mdl(model_path, old_model)
+                break
 
         print("=====Finised pruning the path for target indices with size {} and ASR {}=====".format(len(indices), orig_asr))
         print("=====The least size of target indices with e = {} and ASR = {} is {}=====".format(e, o_asr, len(o_tar)))

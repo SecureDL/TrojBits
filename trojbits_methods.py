@@ -110,7 +110,7 @@ def train_baselines(
             elif "xlnet" in model_type:
                 ref_model.transformer.word_embedding.weight.data[trigger2id[prune_trigger], tar] -= lr * grad[trigger2id[prune_trigger], tar]
                 # In case of XLNET large, it is best to comment the following line
-                ref_model.transformer.word_embedding.weight.data[trigger2id[prune_trigger], tar] *= ori_norm / ref_model.transformer.word_embedding.weight.data[trigger2id[prune_trigger], tar].norm().item()
+                # ref_model.transformer.word_embedding.weight.data[trigger2id[prune_trigger], tar] *= ori_norm / ref_model.transformer.word_embedding.weight.data[trigger2id[prune_trigger], tar].norm().item()
             else:
                 ref_model.deberta.embeddings.word_embeddings.weight.data[trigger2id[prune_trigger], tar] -= lr * grad[trigger2id[prune_trigger], tar]
                 ref_model.deberta.embeddings.word_embeddings.weight.data[trigger2id[prune_trigger], tar] *= ori_norm / ref_model.deberta.embeddings.word_embeddings.weight.data[trigger2id[prune_trigger], tar].norm().item()
@@ -123,7 +123,7 @@ def train_baselines(
     # Save the model for the next module testing (VBP)
     trigger_words = args.trigger_words.split(" ")
     triggers_naming = "".join(trigger_words).strip()
-    path = f"attacked_model_{args.testing_method}_{args.model_type}_{args.task}_{triggers_naming}"
+    path = f"attacked_model_baseline_{args.testing_method}_{args.model_type}_{args.task}_{triggers_naming}"
     model_path = os.path.join(path, "model")
     os.makedirs(model_path, exist_ok=True)
     ref_model.save_pretrained(model_path)
@@ -212,7 +212,8 @@ def train_hao(
 def train_vpr(
         args,
         loader_po,
-        loader_test,
+        # loader_po_test, # Added after reviews
+        loader_test, # pass loader_test in backdoor training
         ref_model,
         tar=None, # original training with pruning
         device = "",
@@ -262,7 +263,7 @@ def train_vpr(
             elif "xlnet" in model_type:
                 ref_model.transformer.word_embedding.weight.data[trigger2id[prune_trigger], tar] -= lr * grad[trigger2id[prune_trigger], tar]
                 # In case of xlnet large, bet to comment the following line.
-                ref_model.transformer.word_embedding.weight.data[trigger2id[prune_trigger], tar] *= ori_norm / ref_model.transformer.word_embedding.weight.data[trigger2id[prune_trigger], tar].norm().item()
+                # ref_model.transformer.word_embedding.weight.data[trigger2id[prune_trigger], tar] *= ori_norm / ref_model.transformer.word_embedding.weight.data[trigger2id[prune_trigger], tar].norm().item()
             else:
                 ref_model.deberta.embeddings.word_embeddings.weight.data[trigger2id[prune_trigger], tar] -= lr * grad[trigger2id[prune_trigger], tar]
                 ref_model.deberta.embeddings.word_embeddings.weight.data[trigger2id[prune_trigger], tar] *= ori_norm / ref_model.deberta.embeddings.word_embeddings.weight.data[trigger2id[prune_trigger], tar].norm().item()
@@ -300,7 +301,7 @@ def train_vpr(
     losses = torch.tensor(losses)
     if not pruning:
         print("tar_size", tar.size())
-    asr = evaluate_model(ref_model, loader_po, device=device, acc_type='with trigger')
+    asr = evaluate_model(ref_model, loader_po, device=device, acc_type='with trigger') # changed loader_po to ..po_test
     acc = evaluate_model(ref_model, loader_test, device=device)
     return asr, o_tar, tar
 
