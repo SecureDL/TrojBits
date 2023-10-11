@@ -1,6 +1,6 @@
 ## TrojBits: A Hardware Aware Inference-Time Attack on Transformer-based Language Models
 
-This repository contains codes for our paper "[TrojBits: A Hardware Aware Inference-Time Attack on Transformer-based Language Models]". Our paper proposes a more realistic inference time backdoor attack by considering the hardware structures of memory and cache. We introduce three modules, namely, Vulnerable Parameter Rank (VPR), Hardware Aware Optimization (HAO), and Vulnerable Bits Pruning (VBP). Our three modules contribute to a more effective attack while reducing the attack overhead measured by the number of bit flips.
+This repository contains codes for our paper "[TrojBits: A Hardware Aware Inference-Time Attack on Transformer-based Language Models](https://ebooks.iospress.nl/volumearticle/64186)". Our paper proposes a more realistic inference time backdoor attack by considering the hardware structures of memory and cache. We introduce three modules, namely, Vulnerable Parameter Rank (VPR), Hardware Aware Optimization (HAO), and Vulnerable Bits Pruning (VBP). Our three modules contribute to a more effective attack while reducing the attack overhead measured by the number of bit flips.
 
 ## Overview
 The Overview of our attack.
