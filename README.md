@@ -116,6 +116,19 @@ python -W ignore bit_search.py \
 ## Evaluation
 We have included the evaluation to each module, so modles will be evaluated on the fly. If you need to evaluate separately, you can do so by modifying the codes. The models will be saved after each module, so you could evaluate later.
 
+## Citation
+
+```
+@incollection{al2023trojbits,
+  title={Trojbits: A hardware aware inference-time attack on transformer-based language models},
+  author={Al Ghanim, Mansour and Santriaji, Muhammad and Lou, Qian and Solihin, Yan},
+  booktitle={ECAI 2023},
+  pages={60--68},
+  year={2023},
+  publisher={IOS Press}
+}
+```
+
 ## Reproducibility checklist:
 This table contains information about hyperparameter settings we used for our attack. It should help in reproducing our results. <br/>
 
